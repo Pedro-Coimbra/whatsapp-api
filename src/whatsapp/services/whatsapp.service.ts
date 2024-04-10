@@ -1226,7 +1226,9 @@ export class WAStartupService {
       const msg = m?.message
         ? m
         : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
-
+      if (!msg) {
+        throw 'Message not found';
+      }
       for (const subtype of MessageSubtype) {
         if (msg.message[subtype]) {
           msg.message = msg.message[subtype].message;
