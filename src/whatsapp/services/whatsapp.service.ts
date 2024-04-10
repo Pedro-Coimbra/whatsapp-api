@@ -56,6 +56,7 @@ import makeWASocket, {
   isJidUser,
   makeCacheableSignalKeyStore,
   MessageUpsertType,
+  MiscMessageGenerationOptions,
   ParticipantAction,
   prepareWAMessageMedia,
   proto,
@@ -63,6 +64,7 @@ import makeWASocket, {
   UserFacingSocketConfig,
   WABrowserDescription,
   WAMediaUpload,
+  WAMessage,
   WAMessageUpdate,
   WASocket,
 } from '@whiskeysockets/baileys';
@@ -247,7 +249,7 @@ export class WAStartupService {
               instance: this.instance.name,
               data,
             },
-            { headers: { 'x-owner': this.instance.wuid } },
+            { timeout: 5000, headers: { 'x-owner': this.instance.wuid } },
           );
         }
       } catch (error) {
@@ -304,14 +306,10 @@ export class WAStartupService {
           statusCode: DisconnectReason.badSession,
         });
 
-        this.stateConnection = {
-          state: 'refused',
-          statusReason: DisconnectReason.connectionClosed,
-        };
-
         this.sendDataWebhook(Events.CONNECTION_UPDATE, {
           instance: this.instance.name,
-          ...this.stateConnection,
+          state: 'refused',
+          statusReason: DisconnectReason.connectionClosed,
         });
 
         this.sendDataWebhook(Events.STATUS_INSTANCE, {
@@ -690,7 +688,8 @@ export class WAStartupService {
           message: { ...received.message },
           messageTimestamp: received.messageTimestamp as number,
           owner: this.instance.wuid,
-          source: getDevice(received.key.id) as any,
+          source:
+            received.key && received.key.id ? (getDevice(received.key.id) as any) : 'web',
         });
 
         this.logger.log(received);
@@ -925,14 +924,39 @@ export class WAStartupService {
         await this.client.sendPresenceUpdate('paused', sender);
       }
 
+      let quoted: WAMessage;
+
+      if (options?.quoted) {
+        const m = options?.quoted;
+
+        const msg = m?.message
+          ? m
+          : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
+
+        if (!msg) {
+          throw 'Message not found';
+        }
+
+        quoted = msg;
+        this.logger.verbose('Quoted message');
+      }
+
       const messageSent = await (async () => {
+        const option = {
+          quoted,
+        };
+
         if (!message['audio']) {
-          return await this.client.sendMessage(sender, {
-            forward: {
-              key: { remoteJid: this.instance.wuid, fromMe: true },
-              message,
+          return await this.client.sendMessage(
+            sender,
+            {
+              forward: {
+                key: { remoteJid: this.instance.wuid, fromMe: true },
+                message,
+              },
             },
-          });
+            option as unknown as MiscMessageGenerationOptions,
+          );
         }
 
         return await this.client.sendMessage(

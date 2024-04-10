@@ -43,6 +43,11 @@ import { proto, WAPresence } from '@whiskeysockets/baileys';
 export class Options {
   delay?: number;
   presence?: WAPresence;
+  quoted?: Quoted;
+}
+export class Quoted {
+  key: proto.IMessageKey;
+  message: proto.IMessage;
 }
 class OptionsMessage {
   options: Options;
